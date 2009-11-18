@@ -1,4 +1,4 @@
-v3.1.4. Sorting files for manifest to ensure it does not change if files are listed in different orders.
+v3.2. Sort manifest.
 
 v3.1.3. Removing Evan's keychain so GitHub can build the gem. Version bump to force GitHub to re-generate gem.
 

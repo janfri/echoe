@@ -2,11 +2,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{echoe}
-  s.version = "3.1.4"
+  s.version = "3.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 1.2") if s.respond_to? :required_rubygems_version=
   s.authors = ["Evan Weaver"]
-  s.date = %q{2009-08-22}
+  s.date = %q{2009-08-27}
   s.description = %q{A Rubygems packaging tool that provides Rake tasks for documentation, extension compiling, testing, and deployment.}
   s.email = %q{}
   s.extra_rdoc_files = ["CHANGELOG", "lib/echoe/client.rb", "lib/echoe/extensions.rb", "lib/echoe/net.rb", "lib/echoe/platform.rb", "lib/echoe/rubygems.rb", "lib/echoe.rb", "LICENSE", "README", "TODO"]
