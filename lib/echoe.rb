@@ -1,6 +1,5 @@
 
 $HERE = File.dirname(__FILE__)
-require "#{$HERE}/echoe/platform"
 
 require 'rake'
 require 'rake/clean'
@@ -15,18 +14,21 @@ rescue LoadError
 end
 require 'rbconfig'
 require 'open-uri'
+require 'tmpdir'
 
 require "#{$HERE}/echoe/extensions"
 
 require 'rubygems'
-require 'rubygems/specification'
-require "#{$HERE}/echoe/rubygems"
-
 require 'rubyforge'
-require "#{$HERE}/echoe/net"
-require "#{$HERE}/echoe/client"
 
-require 'highline/import'
+Echoe.silence { require 'rubygems/specification' }
+
+require "#{$HERE}/echoe/rubygems"
+begin
+  gem 'gemcutter'
+  require 'rubygems_plugin'
+rescue Gem::LoadError
+end
 
 begin; require 'rcov/rcovtask'; rescue LoadError; end
 begin; require 'load_multi_rails_rake_tasks'; rescue LoadError; end
@@ -42,8 +44,6 @@ For example, a simple <tt>Rakefile</tt> might look like this:
   Echoe.new("uncapitalizer") do |p|
     p.author = "Evan Weaver"
     p.summary = "A library that uncapitalizes strings."
-    p.url = "http://www.uncapitalizer.com"
-    p.docs_host = "uncapitalizer.com:~/www/files/doc/"
     p.runtime_dependencies = ["string_tools >=1.4.0"]
   end
 
@@ -95,7 +95,7 @@ Descriptive options:
 * <tt>email</tt> - Your email address.
 * <tt>description</tt> - A more detailed description of the library.
 * <tt>summary</tt> - A shorter description of the library.
-* <tt>url</tt> - A url for the library.
+* <tt>url</tt> - A url for the library. Defaults to generated RDoc on GitHub pages for the project.f
 * <tt>install_message</tt> - A message to display after the gem is installed.
 
 Versioning options:
@@ -129,6 +129,7 @@ Uncommon packaging options:
 * <tt>ruby_version</tt> - Version string for which Ruby to require (for example, <tt>'>= 1.8.4'</tt>.
 * <tt>eval</tt> - Accepts a proc to be evaluated in the context of the Gem::Specification object. This allows you to set more unusual gemspec options.
 * <tt>ignore_pattern</tt> - A filename array, glob array, or regex for pathnames that should be ignored when building the manifest.
+* <tt>require_paths</tt> - Non-standard requirement paths to add to the gem definition.
 * <tt>executable_pattern</tt> - A filename array, glob array, or regex for files that should be installed as wrapped executables.
 
 Security options:
@@ -139,8 +140,8 @@ Security options:
 
 Publishing options:
 
-* <tt>project</tt> - The name of the Rubyforge project to upload to. Defaults to the name of the gem.
-* <tt>docs_host</tt> - A host and filesystem path to publish the documentation to. Defaults to the Rubyforge project.
+* <tt>project</tt> - The name of the Rubyforge project. Defaults to the name of the gem.
+* <tt>docs_host</tt> - A host and filesystem path to publish the documentation to. Defaults to GitHub pages for the project. SSH upload to an accessible static file host also works.
 
 Documentation options:
 
@@ -152,10 +153,10 @@ Documentation options:
 class Echoe
 
   # user-configurable
-  attr_accessor :author, :changes, :clean_pattern, :description, :email, :runtime_dependencies, :development_dependencies, :need_tgz, :need_tar_gz, :need_gem, :need_zip, :rdoc_pattern, :project, :summary, :test_pattern, :spec_pattern, :url, :version, :docs_host, :rdoc_template, :manifest_name, :install_message, :extension_pattern, :private_key, :certificate_chain, :require_signed, :ruby_version, :platform, :ignore_pattern, :executable_pattern, :changelog, :rcov_options, :gemspec_format
+  attr_accessor :author, :changes, :clean_pattern, :description, :email, :runtime_dependencies, :development_dependencies, :need_tgz, :need_tar_gz, :need_gem, :need_zip, :rdoc_pattern, :project, :summary, :test_pattern, :spec_pattern, :url, :version, :docs_host, :rdoc_template, :manifest_name, :install_message, :extension_pattern, :private_key, :certificate_chain, :require_signed, :ruby_version, :platform, :ignore_pattern, :executable_pattern, :require_paths, :changelog, :rcov_options, :gemspec_format
 
   # best left alone
-  attr_accessor :name, :lib_files, :test_files, :bin_files, :spec, :rdoc_options, :rubyforge_name, :has_rdoc, :include_gemspec, :include_rakefile, :gemspec_name, :retain_gemspec, :rakefile_name, :eval, :files, :changelog_patterns, :rubygems_version, :use_sudo, :gem_bin
+  attr_accessor :name, :lib_files, :test_files, :bin_files, :spec, :rdoc_options, :has_rdoc, :include_gemspec, :include_rakefile, :gemspec_name, :retain_gemspec, :rakefile_name, :eval, :files, :changelog_patterns, :rubygems_version, :use_sudo, :gem_bin
 
   # legacy
   attr_accessor :extra_deps, :rdoc_files, :extensions, :dependencies
@@ -166,18 +167,18 @@ class Echoe
     self.name = name
     self.project = name.downcase
     self.changelog = "CHANGELOG"
-    self.url = ""
     self.author = ""
     self.email = ""
     self.clean_pattern = ["pkg", "doc", 'build/*', '**/coverage', '**/*.o', '**/*.so', '**/*.a', '**/*.log', "{ext,lib}/*.{bundle,so,obj,pdb,lib,def,exp}", "ext/Makefile", "{ext,lib}/**/*.{bundle,so,obj,pdb,lib,def,exp}", "ext/**/Makefile", "pkg", "*.gem", ".config"]
     self.test_pattern = File.exist?("test/test_all.rb") ? "test/test_all.rb" : ['test/**/test_*.rb', 'test/**/*_test.rb']
     self.spec_pattern = "spec/**/*_spec.rb"
-    self.ignore_pattern = /^(pkg|doc)|\.svn|CVS|\.bzr|\.DS|\.git/
+
+    self.ignore_pattern = /^(pkg|doc)|(\.svn|CVS|\.bzr|\.DS|\.git)$/
 
     self.changelog_patterns = {
         :version => [
-            /^\s*v([\d\.]+)(\.|\s|$)/,
-            /\s*\*\s*([\d\.]+)\s*\*\s*$/
+            /^\s*v([\d\w\.]+)(\.|\s|$)/,
+            /\s*\*\s*([\d\w\.]+)\s*\*\s*$/
           ],
         :changes => [
           /^\s*v([\d\.]+\. .*)/,
@@ -189,8 +190,9 @@ class Echoe
     self.summary = ""
     self.install_message = nil
     self.executable_pattern = /^bin\//
+    self.require_paths = nil
     self.has_rdoc = true
-    self.use_sudo = !Platform.windows?
+    self.use_sudo = !(Platform.windows? or ENV['GEM_HOME'].to_s.include?(ENV['USER'].to_s))
     self.gem_bin = "gem#{Platform.suffix}"
     self.rcov_options = []
     self.rdoc_pattern = /^(lib|bin|tasks|ext)|^README|^CHANGELOG|^TODO|^LICENSE|^COPYING$/
@@ -226,10 +228,14 @@ class Echoe
 
     yield self if block_given?
 
+    self.docs_host ||= "git@github.com:#{self.project}/#{self.project}.github.com"
+    if self.docs_host =~ /git@github.com/
+      self.url ||= "http://#{self.project}.github.com/#{self.project}/#{(self.name + '/') if project != name}"
+    end
+
     # legacy compatibility
     self.runtime_dependencies = dependencies if dependencies and runtime_dependencies.empty?
     self.runtime_dependencies = extra_deps if extra_deps and runtime_dependencies.empty?
-    self.project = rubyforge_name if rubyforge_name
     self.rdoc_pattern = rdoc_files if rdoc_files
     self.extension_pattern = extensions if extensions
 
@@ -283,13 +289,31 @@ class Echoe
     self.summary = description if summary.empty?
     self.clean_pattern = apply_pattern(clean_pattern)
     self.extension_pattern = apply_pattern(extension_pattern, files)
+
     self.ignore_pattern = apply_pattern(ignore_pattern)
+    honor_gitignore! if File.exist?(".git")
+
     self.rdoc_pattern = apply_pattern(rdoc_pattern, files) - [manifest_name]
     self.executable_pattern = apply_pattern(executable_pattern, files)
     self.test_pattern = apply_pattern(test_pattern)
     self.spec_pattern = apply_pattern(spec_pattern)
 
     define_tasks
+  end
+
+private
+  def honor_gitignore!
+    self.ignore_pattern += \
+      Dir["**/.gitignore"].inject([]) do |pattern,gitignore|
+        pattern.concat \
+          File.readlines(gitignore).
+            map    { |line| line.strip }.
+            reject { |line| "" == line }.
+            map    { |glob|
+              d = File.dirname(gitignore)
+              d == "." ? glob : File.join(d, glob)
+            }
+      end.flatten.uniq
   end
 
   def apply_pattern(pattern, files = nil)
@@ -366,7 +390,11 @@ class Echoe
 
       dirs = Dir['{lib,ext}']
       s.extensions = extension_pattern if extension_pattern.any?
-      s.require_paths = dirs unless dirs.empty?
+      if require_paths
+        s.require_paths = require_paths
+      else
+        s.require_paths = dirs unless dirs.empty?
+      end
       s.has_rdoc = has_rdoc
 
       if File.exist? "test/test_all.rb"
@@ -390,25 +418,25 @@ class Echoe
       pkg.need_tar_gz = @need_tar_gz
       pkg.need_zip = @need_zip
     end
-    
+
     desc "Display Echoe's knowledge of your system"
     task :details do
       (self.instance_variables.sort - ['@spec']).each do |var|
         puts "#{var}: #{instance_variable_get(var).inspect}"
       end
     end
-    
+
     desc "Builds the .gemspec"
     task :build_gemspec do
       # Construct the gemspec file, if needed.
       if include_gemspec
-        File.open(gemspec_name, 'w') do |f|          
+        File.open(gemspec_name, 'w') do |f|
           case gemspec_format
           when :yaml
             spec.to_yaml.split("\n").each do |line|
               # Don't publish any information about the private key or certificate chain
               f.puts line unless line =~ /signing_key|cert_chain|\.pem/
-            end          
+            end
           when :ruby
             f.puts spec.to_ruby
           else
@@ -449,7 +477,7 @@ class Echoe
 
     desc 'Install the gem'
     task :install => [:clean, :package, :uninstall] do
-      system "#{'sudo' if use_sudo} #{gem_bin} install pkg/*.gem -P MediumSecurity --no-update-sources"
+      system "#{'sudo' if use_sudo} #{gem_bin} install pkg/*.gem --no-update-sources #{'-P MediumSecurity' if private_key and File.exist?(private_key)}"
     end
 
     namespace :install do
@@ -464,38 +492,35 @@ class Echoe
       system "#{'sudo' if use_sudo} #{gem_bin} uninstall #{name} -a -I -x"
     end
 
-    desc 'Package and upload the release to Rubyforge'
-    task :release => [:clean, :package] do |t|
+    desc 'Override this task to add prerelease checks'
+    task :prerelease
 
-      say "\n"
-      if agree "Release #{name}-#{version} to Rubyforge? "
-        pkg = "pkg/#{name}-#{version}"
-        pkg_gem = pkg + ".gem"
-        pkg_tar = pkg + ".tgz"
-        pkg_tar_gz = pkg + ".tar.gz"
-        pkg_zip = pkg + ".zip"
-
-        rf = RubyForge.new.configure
-        puts "Logging in"
-        rf.login
-
-        c = rf.userconfig
-        c["release_notes"] = description if description
-        c["release_changes"] = changes if changes
-        c["preformatted"] = false
-
-        files = [(@need_tgz ? pkg_tar : nil),
-                  (@need_tar_gz ? pkg_tar_gz : nil),
-                  (@need_zip ? pkg_zip : nil),
-                  (@need_gem ? pkg_gem : nil)].compact
-
-        puts "Releasing #{name} v. #{version}"
-        self.version = self.version.to_s.ljust(3)
-
-        rf.add_release project, name, version, *files
+    desc 'Package and upload the release to Gemcutter'
+    task :release => [:prerelease, :clean, :package] do |t|
+      git_branch = nil
+      if (File.exist?(".git"))
+        git_branch = `git branch --no-color | egrep '^\\*' | awk '{print $2}'`.chomp
+        if (`git diff origin/#{git_branch}`).any?
+          puts "You need to commit and push your changes first."
+          exit(1)
+        end
       end
+      tag = "#{name}-#{version}"
+      pkg = "pkg/#{tag}"
+      pkg_gem = pkg + ".gem"
+      pkg_tar = pkg + ".tgz"
+      pkg_tar_gz = pkg + ".tar.gz"
+      pkg_zip = pkg + ".zip"
 
-    end
+      puts "Releasing #{name} v. #{version}  to Gemcutter."
+      if system("gem push #{pkg_gem.inspect}")
+        if git_branch
+          if system("git tag #{tag} && git push origin #{tag}")
+            puts "Tagged release as #{tag}"
+          end
+        end
+     end
+   end
 
     ### Extension building
 
@@ -513,7 +538,11 @@ class Echoe
           Dir.chdir(ext_dir) do
             ruby File.basename(extension)
             system(RUBY_PLATFORM =~ /win32/ ? 'nmake' : 'make')
-            lib_target = open('Makefile').readlines.grep(/target_prefix = /).first.split('=').last.chomp("\n").strip
+            lib_target = if(target_prefix_line = open('Makefile').readlines.grep(/target_prefix = /).first)
+              target_prefix_line.split('=').last.chomp("\n").strip
+            else
+              ''
+            end
           end
           Dir["#{ext_dir}/*.#{Config::CONFIG['DLEXT']}"].each do |file|
             dir = "lib/#{lib_target}/".gsub('//', '/')
@@ -549,38 +578,52 @@ class Echoe
         rd.template = rdoc_template
       elsif ENV['RDOC_TEMPLATE']
         rd.template = ENV['RDOC_TEMPLATE']
+      elsif `allison --path`.any?
+        rd.template = `allison --path`.chomp
       end
     end
 
     task :doc => [:redocs]
 
-    desc "Publish documentation to #{docs_host ? "'#{docs_host}'" : "rubyforge"}"
+    desc "Publish documentation to the internet."
     task :publish_docs => [:clean, :docs] do
 
-      local_dir = 'doc'
-      remote_dir_name = project
-      remote_dir_name += "/#{name}" if project != name
+      local_dir = File.expand_path('doc')
 
-      unless docs_host
-        config = YAML.load(File.read(File.expand_path("~/.rubyforge/user-config.yml")))
-        pub = Rake::SshDirPublisher.new "#{config["username"]}@rubyforge.org",
-          "/var/www/gforge-projects/#{remote_dir_name}",
-          local_dir
-        if project != name then
-          def pub.upload
-            begin
-              super
-            rescue
-              # project directory probably doesn't exist, transfer as a whole
-              cmd = "scp -qr #{local_dir} #{host}:#{remote_dir}"
-              puts "Uploading: #{cmd}"
+      if docs_host =~ /git@github.com/
+        Dir.mktmpdir do |dir|
+          Dir.chdir(dir) do
+            puts "Working in: #{dir}"
+            cmd = "git clone #{docs_host}"
+            puts "Cloning existing docs: #{cmd}"
+            system(cmd)
+
+            repository_name = docs_host.split("/").last
+            Dir.chdir(repository_name) do
+              project_dir_name = project
+              Dir.mkdir(project_dir_name) rescue nil
+
+              project_dir_name += "/#{name}" if project != name
+              Dir.mkdir(project_dir_name) rescue nil
+
+              cmd = "rm -rf '#{project_dir_name}' && mv #{local_dir} '#{project_dir_name}'"
+              puts("Moving docs into checkout: #{cmd}")
+              system(cmd)
+
+              cmd = "git add '#{project_dir_name}' && git commit -a -m 'Update documentation for #{name} #{version}'"
+              puts "Committing changes: #{cmd}"
+              system(cmd)
+
+              cmd = "git push"
+              puts "Pushing changes: #{cmd}"
               system(cmd)
             end
           end
         end
-        pub.upload
       else
         # you may need ssh keys configured for this to work
+        remote_dir_name = project
+        remote_dir_name += "/#{name}" if project != name
         host, dir = docs_host.split(":")
         dir.chomp!("/")
 
@@ -598,43 +641,42 @@ class Echoe
     desc 'Generate a release announcement, edit it, and post it to Rubyforge.'
     task :announce do
 
-      filename = "/tmp/#{name}_#{version}_announcement.txt"
+      filename = "#{Dir.tmpdir}/#{name}_#{version}_announcement.txt"
 
-      if !File.exist?(filename) or agree "Overwrite existing announcement file? "
-        File.open(filename, 'w') do |f|
-          f.write "Subject: #{name.capitalize} #{version}\n\n"
-          f.write "#{name.capitalize} has been updated to #{version}. #{name.capitalize} is #{summary.uncapitalize}\n\n"
-          unless changes.empty?
-            f.write "Changes in this version: "
-            if changes.include?("\n")
-              f.write(changes)
-            else
-              f.write(changes.sub(/^\s*[\w\d\.]+\s+/, '').uncapitalize)
-            end
-            f.write("\n\n")
+      if File.exist?(filename)
+        puts "Announcement file already exists. Please delete #{filename.inspect} first."
+        exit(1)
+      end
+
+      File.open(filename, 'w') do |f|
+        f.write "Subject: #{name.capitalize} #{version}\n\n"
+        f.write "#{name.capitalize} has been updated to #{version}. #{name.capitalize} is #{summary.uncapitalize}\n\n"
+        unless changes.empty?
+          f.write "Changes in this version: "
+          if changes.include?("\n")
+            f.write(changes)
+          else
+            f.write(changes.sub(/^\s*[\w\d\.]+\s+/, '').uncapitalize)
           end
-          f.write "More information is available at #{url} .\n\n" unless url.empty?
+          f.write("\n\n")
         end
+        f.write "More information is available at #{url} .\n\n" unless url.empty?
       end
 
-      begin
-        editor = ENV['EDITOR'] || 'nano'
-        system("#{editor} #{filename}") or raise "Editor '#{editor}' failed to start"
-        puts File.open(filename).read
-      end while !agree "Done editing? "
+      editor = ENV['EDITOR'] || 'nano'
+      system("#{editor} #{filename}") or raise "Editor '#{editor}' failed to start"
+      puts File.open(filename).read
 
-      if agree "Publish announcement to Rubyforge? "
-        File.open(filename).readlines.detect { |line| line =~ /Subject: (.*)/ }
-        subject = $1 or raise "Subject line seems to have disappeared"
+      File.open(filename).readlines.detect { |line| line =~ /Subject: (.*)/ }
+      subject = $1 or raise "Subject line seems to have disappeared"
 
-        body = File.open(filename).readlines.reject { |line| line =~ /Subject: / }.join.gsub("\n\n\n", "\n\n")
+      body = File.open(filename).readlines.reject { |line| line =~ /Subject: / }.join.gsub("\n\n\n", "\n\n")
 
-        rf = RubyForge.new.configure
-        rf.login
-        rf.post_news(project, subject, body)
-        puts "Published."
-        File.delete filename
-      end
+      rf = RubyForge.new.configure
+      rf.login
+      rf.post_news(project, subject, body)
+      puts "Published announcement to Rubyforge."
+      File.delete filename
     end
 
     ### Clean
@@ -723,7 +765,7 @@ class Echoe
       task :default => :test
     end
 
-    if spec_pattern.any?
+    if defined? Spec and spec_pattern.any?
       desc "Run the spec suite"
       Spec::Rake::SpecTask.new('spec') do |t|
         t.spec_files = spec_pattern
@@ -740,7 +782,7 @@ class Echoe
       end
       task :rcov => :coverage
     end
-
   end
 end
 
+require "#{$HERE}/echoe/platform"
