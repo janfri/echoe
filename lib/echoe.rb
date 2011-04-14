@@ -299,6 +299,14 @@ class Echoe
     self.spec_pattern = apply_pattern(spec_pattern)
 
     define_tasks
+    load_plugins
+  end
+
+  # Define a plugin
+  # The block is executed in context of the Echoe object
+  # after defining the standard tasks
+  def self.plugin(&blk)
+    @@plugins << blk
   end
 
 private
@@ -787,6 +795,14 @@ private
     desc 'Start an irb session and load the library.'
     task :console do
       exec "irb -I lib -r #{name}" 
+    end
+  end
+
+  @@plugins = []
+
+  def load_plugins
+    @@plugins.each do |p|
+      instance_eval &p
     end
   end
 end
